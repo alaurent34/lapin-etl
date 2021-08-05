@@ -1,12 +1,10 @@
 # Introduction 
-TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
+Processus d'ETL pour les données de lecture LAPI. Attention, à l'état actuel du programme, toutes les données historiques doivent être présentent dans le dossier car un remplacement complet est effectué.
 
-# Getting Started
-TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
-1.	Installation process
-2.	Software dependencies
-3.	Latest releases
-4.	API references
+# Démarrer
+Avant d'excécuter le code il faut :
+1.	Installer python
+2.	Installer les dépendances
 
 # Build and Test
 TODO: Describe and show how to build your code and run the tests. 
