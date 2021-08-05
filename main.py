@@ -3,7 +3,8 @@ import pandas as pd
 import geopandas as gpd
 
 import connections
-import config
+import querry
+import runtime_conf
 import utils
 
 def extract(path):
@@ -13,6 +14,19 @@ def extract(path):
         df_tmp = pd.read_csv(os.path.join(path, file))
         data= pd.concat([data, df_tmp])
     
+    return data
+
+def extractPlaqueCollecte(con, collecteConf):
+    where_cond = " AND "
+    for date in collecteConf['datesCollecte']:
+        where_cond += querry.DEFAULT_WHERE.format(date['from'], date['to'])
+        where_cond += ' OR '
+    where_cond += " 1=2 "
+    collecte_sql = querry.DEFAULT_LAPI_QUERRY + where_cond + querry.ORDER_BY_SQL
+
+    data = pd.read_sql(con=con, sql=collecte_sql)
+    data['id_collecte'] = collecteConf['id']
+
     return data
 
 def transformGenetec(dataGenetec, con, numTech=0, nameTech='Genetec'):
@@ -26,7 +40,7 @@ def transformGenetec(dataGenetec, con, numTech=0, nameTech='Genetec'):
     dataGenetec[['Latitude', 'Longitude']] = dataGenetec[['Latitude', 'Longitude']].round(10)
 
     # create DB dataframe
-    columns = pd.read_sql(con=con, sql=f'SELECT * FROM {config.TABLE_NAME}')
+    columns = pd.read_sql(con=con, sql=f'SELECT * FROM {querry.LECTURE_TABLE_NAME}')
     data = pd.DataFrame(columns=columns)
 
     # fill it
@@ -58,7 +72,7 @@ def transformTanary(dataTanary, con, numTech=1, nameTech='Tanary-Creek'):
     dataTanary['VehId'] = 1 # Tanary does not have any veh id for now
 
     # create DB dataframe
-    columns = pd.read_sql(con=con, sql=f'SELECT * FROM {config.TABLE_NAME}')
+    columns = pd.read_sql(con=con, sql=f'SELECT * FROM {querry.LECTURE_TABLE_NAME}')
     data = pd.DataFrame(columns=columns)
 
     # fill it
@@ -80,24 +94,69 @@ def transformTanary(dataTanary, con, numTech=1, nameTech='Tanary-Creek'):
 
     return data
 
+def transformSaaqRequest(data):
+    data = data.copy()
+
+    data = data[['id_collecte', 'plaque']].copy()
+    data = data.drop_duplicates()
+    data.rename(columns={'id_collecte':'IdDeProjet', 'plaque':'NoDePlaque'}, inplace=True)
+    return data
+
+def prepareTable(con, tableName, tableDefintion, truncate=False):
+    # Create table if not exist and troncate
+    if not utils.checkTableExists(con, tableName):
+        utils.create_table(con, tableName, tableDefintion)
+    # TODO: Do not truncute and just insert new values
+    if truncate:
+        utils.truncate_table(con, tableName)
+
+def exportSaaqFile(con, collecteConf):
+    data = pd.read_sql(con=con, sql=f'SELECT * FROM {querry.SAAQ_TABLE_NAME} WHERE IdDeProjet={collecteConf["id"]}')
+    data = data[['IdDePlaque', 'NoDePlaque']].copy()
+    data.rename(columns={'NoDePlaque':'NO_PLAQ', 'IdDePlaque':'champ2'}, inplace=True)
+    data.reindex(columns=['NO_PLAQ', 'champ2'])
+
+    path = os.path.join(collecteConf['projectPath'], '03_Travail/33_Préliminaires/')
+    os.makedirs(path, exist_ok=True)
+    data.to_excel(os.path.join(path, f'{collecteConf["id"]}_Plaques.xlsx'), index=False)
+
+def insertLapiData(db_conf, table_name, table_crea):
+    pass
+
 if __name__=='__main__':
 
-    # Connect to the DataBase
-    engine = utils.getEngine(**connections.LAPI_REV)
-    con = engine.connect()
+    if runtime_conf.LOAD_DATA:
+        # Connect to the DataBase
+        engine = utils.getEngine(**connections.LAPI_REV)
+        con = engine.connect()
 
-    # Create table if not exist and troncate
-    if not utils.checkTableExists(con, config.TABLE_NAME):
-        utils.create_table(con, config.TABLE_NAME, config.TABLE_SQL)
-    # TODO: Do not truncute and just insert new values
-    utils.truncate_table(con, config.TABLE_NAME)
+        # create or truncate table
+        prepareTable(con, querry.LECTURE_TABLE_NAME, querry.LECTURE_TABLE_SQL, truncate=True)
 
-    # ETL for Genetec Data
-    dataGenetec = extract(**connections.SOURCES['Genetec'])
-    dataLoad = transformGenetec(dataGenetec, con)
-    dataLoad.to_sql(config.TABLE_NAME, con=con, index=False, if_exists='append', schema='dbo', dtype={'PointGeo': utils.Geometry})
+        # ETL for Genetec Data
+        print('Genetec ETL')
+        dataGenetec = extract(**connections.SOURCES['Genetec'])
+        dataLoad = transformGenetec(dataGenetec, con)
+        dataLoad.to_sql(querry.LECTURE_TABLE_NAME, con=con, index=False, if_exists='append', schema='dbo', dtype={'PointGeo': utils.Geometry})
 
-    # ETL for Tanary-Creek
-    dataTanary = extract(**connections.SOURCES['Tanary-Creek'])
-    dataLoad = transformTanary(dataTanary, con)
-    dataLoad.to_sql(config.TABLE_NAME, con=con, index=False, if_exists='append', schema='dbo', dtype={'PointGeo': utils.Geometry})
+        # ETL for Tanary-Creek
+        # Ne marche pas, prend trop de temps
+        # print('Tanary-Creek ETL')
+        # dataTanary = extract(**connections.SOURCES['Tanary-Creek'])
+        # dataLoad = transformTanary(dataTanary, con)
+        # dataLoad.to_sql(querry.LECTURE_TABLE_NAME, con=con, index=False, if_exists='append', schema='dbo', dtype={'PointGeo': utils.Geometry})
+
+    if runtime_conf.LOAD_SAAQ:
+        # Connect to the DataBase
+        engine = utils.getEngine(**connections.LAPI_REV)
+        con = engine.connect()
+
+        # create table
+        prepareTable(con, querry.SAAQ_TABLE_NAME, querry.SAAQ_TABLE_SQL, truncate=False)
+
+        filteredData = extractPlaqueCollecte(engine.connect(), querry.ONTARIO_1_CONF)
+        filteredData = transformSaaqRequest(filteredData)
+        filteredData.to_sql(querry.SAAQ_TABLE_NAME, con=engine.connect(), index=False, if_exists='append', schema='dbo')
+
+        # export SAAQ request file to Excel
+        exportSaaqFile(engine.connect(), querry.ONTARIO_1_CONF)

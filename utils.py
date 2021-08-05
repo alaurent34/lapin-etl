@@ -58,7 +58,7 @@ def create_table(dbcon, tablename, tablesql):
     dbcur = dbcon.execute("""
     CREATE TABLE [dbo].[{0}](
 		{1}
-	) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+	)
     """.format(
 		tablename.replace('\'', '\'\''),
 		tablesql
