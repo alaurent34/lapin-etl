@@ -29,6 +29,14 @@ def extractPlaqueCollecte(con, collecteConf):
 
     return data
 
+def prepareTable(con, tableName, tableDefintion, truncate=False):
+    # Create table if not exist and troncate
+    if not utils.checkTableExists(con, tableName):
+        utils.create_table(con, tableName, tableDefintion)
+    # TODO: Do not truncute and just insert new values
+    if truncate:
+        utils.truncate_table(con, tableName)
+
 def transformGenetec(dataGenetec, con, numTech=0, nameTech='Genetec'):
     dataGenetec = dataGenetec.copy()
 
@@ -102,23 +110,29 @@ def transformSaaqRequest(data):
     data.rename(columns={'id_collecte':'IdDeProjet', 'plaque':'NoDePlaque'}, inplace=True)
     return data
 
-def prepareTable(con, tableName, tableDefintion, truncate=False):
-    # Create table if not exist and troncate
-    if not utils.checkTableExists(con, tableName):
-        utils.create_table(con, tableName, tableDefintion)
-    # TODO: Do not truncute and just insert new values
-    if truncate:
-        utils.truncate_table(con, tableName)
+def loadSaaq(con, data, idProjet):
+    data = data.copy()
+    # assert that data are not doublons
+    assert data.shape[0] == data.NoDePlaque.unique().shape[0], 'There is some doublons'
+    # filter plates already stored for this querry
+    dataInStore = pd.read_sql(con=con, sql=f'SELECT * FROM {querry.SAAQ_TABLE_NAME} WHERE IdDeProjet={idProjet}')
+    data = data[~data['NoDePlaque'].isin(dataInStore['NoDePlaque'])]
+    # Store data
+    data.to_sql(querry.SAAQ_TABLE_NAME, con=con, index=False, if_exists='append', schema='dbo')
 
-def exportSaaqFile(con, collecteConf):
+    return data
+
+def exportSaaqFile(con, collecteConf, platesToQuerry=[]):
     data = pd.read_sql(con=con, sql=f'SELECT * FROM {querry.SAAQ_TABLE_NAME} WHERE IdDeProjet={collecteConf["id"]}')
     data = data[['IdDePlaque', 'NoDePlaque']].copy()
+    if platesToQuerry:
+        data = data[data.NoDePlaque.isin(platesToQuerry)]
     data.rename(columns={'NoDePlaque':'NO_PLAQ', 'IdDePlaque':'champ2'}, inplace=True)
     data.reindex(columns=['NO_PLAQ', 'champ2'])
 
     path = os.path.join(collecteConf['projectPath'], '03_Travail/33_Préliminaires/')
     os.makedirs(path, exist_ok=True)
-    data.to_excel(os.path.join(path, f'{collecteConf["id"]}_Plaques.xlsx'), index=False)
+    data.to_excel(os.path.join(path, f'{collecteConf["id"]}_{collecteConf["noDemande"]}_plaques.xlsx'), index=False)
 
 def insertLapiData(db_conf, table_name, table_crea):
     pass
@@ -154,9 +168,9 @@ if __name__=='__main__':
         # create table
         prepareTable(con, querry.SAAQ_TABLE_NAME, querry.SAAQ_TABLE_SQL, truncate=False)
 
-        filteredData = extractPlaqueCollecte(engine.connect(), querry.ONTARIO_1_CONF)
+        filteredData = extractPlaqueCollecte(engine.connect(), runtime_conf.SAAQ_ETUDE)
         filteredData = transformSaaqRequest(filteredData)
-        filteredData.to_sql(querry.SAAQ_TABLE_NAME, con=engine.connect(), index=False, if_exists='append', schema='dbo')
+        loadedData = loadSaaq(con, filteredData, runtime_conf.SAAQ_ETUDE['id'])
 
         # export SAAQ request file to Excel
-        exportSaaqFile(engine.connect(), querry.ONTARIO_1_CONF)
+        exportSaaqFile(engine.connect(), runtime_conf.SAAQ_ETUDE, loadedData.NoDePlaque.to_list())

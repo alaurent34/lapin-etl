@@ -1,4 +1,4 @@
-LECTURE_TABLE_NAME = "Données_Lues"
+LECTURE_TABLE_NAME = "F_Données_Lues"
 
 LECTURE_TABLE_SQL = """
 		[SK_F_Lect] [bigint] IDENTITY(1,1) NOT NULL,
@@ -20,7 +20,7 @@ LECTURE_TABLE_SQL = """
         [CoteLecture][tinyint]
 """
 
-SAAQ_TABLE_NAME = 'Plaques_Provenances'
+SAAQ_TABLE_NAME = 'D_Plaques_Provenances'
 
 SAAQ_TABLE_SQL = f"""
 	[IdDePlaque] [int] IDENTITY(1,1) NOT NULL,
@@ -65,6 +65,19 @@ ONTARIO_1_CONF = {
         'to': '2021-08-02'
         }
     ],
+    'noDemande' : '1',
+    'projectPath': 'C:/Users/ALaurent/Agence de mobilité durable/Analyses de mobilité LAPI - General/21506_Piétonnisation Ontario'
+}
+
+ONTARIO_1bis_CONF = {
+    'id': 21506,
+    'datesCollecte': [
+        {
+        'from': '2021-06-18',
+        'to': '2021-06-21'
+        },
+    ],
+    'noDemande' : '1bis',
     'projectPath': 'C:/Users/ALaurent/Agence de mobilité durable/Analyses de mobilité LAPI - General/21506_Piétonnisation Ontario'
 }
 
@@ -79,5 +92,7 @@ ONTARIO_2_CONF = {
         'from': '2021-09-17',
         'to': '2021-09-20'
         },
-    ]
+    ],
+    'noDemande' : '2',
+    'projectPath': 'C:/Users/ALaurent/Agence de mobilité durable/Analyses de mobilité LAPI - General/21506_Piétonnisation Ontario'
 }
