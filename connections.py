@@ -8,7 +8,7 @@ LAPI_REV = {
     'driver': 'SQL Server',
     'server': 'prisqlbiprod01',
     'database': 'LAPI_REV',
-    'autocommit': True,
+    'autocommit': False,
     'fast_executemany': True,
 }
 

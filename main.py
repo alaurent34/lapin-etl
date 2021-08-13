@@ -6,6 +6,7 @@ import connections
 import querry
 import runtime_conf
 import utils
+from sqlalchemy.orm import Session
 
 def extract(path):
 
@@ -142,35 +143,46 @@ if __name__=='__main__':
     if runtime_conf.LOAD_DATA:
         # Connect to the DataBase
         engine = utils.getEngine(**connections.LAPI_REV)
-        con = engine.connect()
+        # begin transaction
+        with engine.connect() as con:
+            try:
+                transaction = con.begin()
+                # create or truncate table
+                prepareTable(con, querry.LECTURE_TABLE_NAME, querry.LECTURE_TABLE_SQL, truncate=True)
 
-        # create or truncate table
-        prepareTable(con, querry.LECTURE_TABLE_NAME, querry.LECTURE_TABLE_SQL, truncate=True)
+                # ETL for Genetec Data
+                print('Genetec ETL')
+                dataGenetec = extract(**connections.SOURCES['Genetec'])
+                dataLoad = transformGenetec(dataGenetec, con)
+                dataLoad.to_sql(querry.LECTURE_TABLE_NAME, con=con, index=False, if_exists='append', schema='dbo', dtype={'PointGeo': utils.Geometry})
+                transaction.commit()
 
-        # ETL for Genetec Data
-        print('Genetec ETL')
-        dataGenetec = extract(**connections.SOURCES['Genetec'])
-        dataLoad = transformGenetec(dataGenetec, con)
-        dataLoad.to_sql(querry.LECTURE_TABLE_NAME, con=con, index=False, if_exists='append', schema='dbo', dtype={'PointGeo': utils.Geometry})
-
-        # ETL for Tanary-Creek
-        # Ne marche pas, prend trop de temps
-        # print('Tanary-Creek ETL')
-        # dataTanary = extract(**connections.SOURCES['Tanary-Creek'])
-        # dataLoad = transformTanary(dataTanary, con)
-        # dataLoad.to_sql(querry.LECTURE_TABLE_NAME, con=con, index=False, if_exists='append', schema='dbo', dtype={'PointGeo': utils.Geometry})
+                # ETL for Tanary-Creek
+                # Ne marche pas, prend trop de temps
+                # print('Tanary-Creek ETL')
+                # dataTanary = extract(**connections.SOURCES['Tanary-Creek'])
+                # dataLoad = transformTanary(dataTanary, con)
+                # dataLoad.to_sql(querry.LECTURE_TABLE_NAME, con=con, index=False, if_exists='append', schema='dbo', dtype={'PointGeo': utils.Geometry})
+            except:
+                transaction.rollback()
+                raise
 
     if runtime_conf.LOAD_SAAQ:
         # Connect to the DataBase
         engine = utils.getEngine(**connections.LAPI_REV)
-        con = engine.connect()
+        with engine.connect() as con:
+            try:
+                transaction = con.begin()
+                # create table
+                prepareTable(con, querry.SAAQ_TABLE_NAME, querry.SAAQ_TABLE_SQL, truncate=False)
 
-        # create table
-        prepareTable(con, querry.SAAQ_TABLE_NAME, querry.SAAQ_TABLE_SQL, truncate=False)
+                filteredData = extractPlaqueCollecte(engine.connect(), runtime_conf.SAAQ_ETUDE)
+                filteredData = transformSaaqRequest(filteredData)
+                loadedData = loadSaaq(con, filteredData, runtime_conf.SAAQ_ETUDE['id'])
 
-        filteredData = extractPlaqueCollecte(engine.connect(), runtime_conf.SAAQ_ETUDE)
-        filteredData = transformSaaqRequest(filteredData)
-        loadedData = loadSaaq(con, filteredData, runtime_conf.SAAQ_ETUDE['id'])
-
-        # export SAAQ request file to Excel
-        exportSaaqFile(engine.connect(), runtime_conf.SAAQ_ETUDE, loadedData.NoDePlaque.to_list())
+                # export SAAQ request file to Excel
+                exportSaaqFile(engine.connect(), runtime_conf.SAAQ_ETUDE, loadedData.NoDePlaque.to_list())
+                transaction.commit()
+            except:
+                transaction.rollback()
+                raise
