@@ -15,7 +15,10 @@ def getEngine(server, database, driver, Trusted_Connection='yes', autocommit=Tru
     
     if driver == 'SQL Server':
         engine = create_engine(
-            f"mssql+pyodbc://{server}/{database}?driver={driver}?Trusted_Connection={Trusted_Connection}?autocommit={autocommit}",
+            f"mssql+pyodbc://{server}/{database}"
+            f"?driver={driver}"
+            f"&Trusted_Connection={Trusted_Connection}"
+            f"&autocommit={autocommit}",
             fast_executemany=fast_executemany
         )
     else: 
@@ -71,3 +74,15 @@ def truncate_table(dbcon, tablename):
         TRUNCATE TABLE [dbo].[{tablename}]
     """)
     dbcur.close()
+
+def get_last_data_inserted(dbcon, tablename, techno='Genetec', timestamp_col='InstantDeLecture'):
+    dbcur = dbcon.execute(f"""
+        SELECT TOP (1) {timestamp_col} 
+        FROM [dbo].[{tablename}]
+        WHERE Techno = '{techno}'
+        ORDER BY {timestamp_col} DESC
+    """)
+    date = pd.to_datetime(dbcur.first()[0])
+    dbcur.close()
+
+    return date

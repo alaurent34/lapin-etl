@@ -1,4 +1,5 @@
 import os
+import sys
 import pandas as pd
 import geopandas as gpd
 
@@ -30,26 +31,37 @@ def extractPlaqueCollecte(con, collecteConf):
 
     return data
 
-def prepareTable(con, tableName, tableDefintion, truncate=False):
+def prepareTable(con, tableName, tableDefintion, truncate=False, techno='Genetec'):
+
+    date = pd.to_datetime('01-01-2001')
     # Create table if not exist and troncate
     if not utils.checkTableExists(con, tableName):
         utils.create_table(con, tableName, tableDefintion)
-    # TODO: Do not truncute and just insert new values
+    else:
+        date = utils.get_last_data_inserted(con, tableName, techno, 'InstantDeLecture')
     if truncate:
-        utils.truncate_table(con, tableName)
+        date = pd.to_datetime('01-01-2001')
 
-def transformGenetec(dataGenetec, con, numTech=0, nameTech='Genetec'):
+    return date
+
+def transformGenetec(dataGenetec, con, last_date, numTech=0, nameTech='Genetec'):
     dataGenetec = dataGenetec.copy()
+
+    # delete row already in datawarehouse
+    dataGenetec.TimestampLocal = pd.to_datetime(dataGenetec.TimestampLocal)
+    dataGenetec = dataGenetec[dataGenetec.TimestampLocal > last_date]
+
+    if dataGenetec.empty:
+        return dataGenetec
 
     # parse genetec data
     dataGenetec.PatrollerId = dataGenetec.PatrollerId.fillna(0)
-    dataGenetec.TimestampLocal = pd.to_datetime(dataGenetec.TimestampLocal)
     dataGenetec['NoJourDeLecture'] = (dataGenetec.TimestampLocal.dt.date.diff().dt.days != 0).cumsum()
     dataGenetec.Infraction = dataGenetec.Infraction.map({'N':0, 'O':1}).fillna(0).astype(int)
     dataGenetec[['Latitude', 'Longitude']] = dataGenetec[['Latitude', 'Longitude']].round(10)
 
     # create DB dataframe
-    columns = pd.read_sql(con=con, sql=f'SELECT * FROM {querry.LECTURE_TABLE_NAME}')
+    columns = pd.read_sql(con=con, sql=f'SELECT TOP(0) * FROM {querry.LECTURE_TABLE_NAME}')
     data = pd.DataFrame(columns=columns)
 
     # fill it
@@ -148,16 +160,21 @@ if __name__=='__main__':
             try:
                 transaction = con.begin()
                 # create or truncate table
-                prepareTable(con, querry.LECTURE_TABLE_NAME, querry.LECTURE_TABLE_SQL, truncate=True)
+                last_data_date = prepareTable(con, querry.LECTURE_TABLE_NAME, querry.LECTURE_TABLE_SQL, truncate=False, techno='Genetec')
 
-                # ETL for Genetec Data
+                # EL for Genetec Data
                 print('Genetec ETL')
+                ## Extract
                 dataGenetec = extract(**connections.SOURCES['Genetec'])
-                dataLoad = transformGenetec(dataGenetec, con)
+                dataLoad = transformGenetec(dataGenetec, con, last_data_date)
+                if dataLoad.empty:
+                    print('Nothing to do.')
+                    sys.exit(0)
+                ## Load
                 dataLoad.to_sql(querry.LECTURE_TABLE_NAME, con=con, index=False, if_exists='append', schema='dbo', dtype={'PointGeo': utils.Geometry})
                 transaction.commit()
 
-                # ETL for Tanary-Creek
+                # EL for Tanary-Creek
                 # Ne marche pas, prend trop de temps
                 # print('Tanary-Creek ETL')
                 # dataTanary = extract(**connections.SOURCES['Tanary-Creek'])

@@ -1,2 +1,4 @@
 *.ipynb
 __pycache__/*
+/.vs/lapin_etl/v16
+/.vs
