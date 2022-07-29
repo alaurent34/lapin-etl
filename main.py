@@ -1,5 +1,6 @@
 import os
 import sys
+import numpy as np
 import pandas as pd
 import geopandas as gpd
 
@@ -80,6 +81,10 @@ def transformGenetec(dataGenetec, con, last_date, numTech=0, nameTech='Genetec')
     data['NoDePlaque'] =  dataGenetec['LicensePlate'].str[:15]
     data['Techno'] = nameTech
     data['IndInfraction'] = dataGenetec['Infraction']
+    if 'LicensePlateState' in dataGenetec.columns:
+        data['EtatPlaqueLue'] = dataGenetec['LicensePlateState']
+    else:
+        data['EtatPlaqueLue'] = np.nan
 
     return data
 
@@ -112,6 +117,7 @@ def transformTanary(dataTanary, con, numTech=1, nameTech='Tanary-Creek'):
     data['NoDePlaque'] =  dataTanary['PLATE']
     data['Techno'] = nameTech
     data['NoPlaceDerivee'] = 'P999'
+    data['EtatPlaqueLue'] = np.nan
 
     return data
 
@@ -162,7 +168,7 @@ if __name__=='__main__':
                 # create or truncate table
                 last_data_date = prepareTable(con, querry.LECTURE_TABLE_NAME, querry.LECTURE_TABLE_SQL, truncate=False, techno='Genetec')
 
-                # EL for Genetec Data
+                # ETL for Genetec Data
                 print('Genetec ETL')
                 ## Extract
                 dataGenetec = extract(**connections.SOURCES['Genetec'])
