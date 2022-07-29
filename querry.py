@@ -17,7 +17,8 @@ LECTURE_TABLE_SQL = """
 		[NoPlaceDerivee] [nvarchar](5),
 		[NoTronconDerivee] [nvarchar](25),
 		[IndInfraction][tinyint] DEFAULT 0,
-        [CoteLecture][tinyint]
+        [CoteLecture][tinyint],
+        [EtatPlaqueLue][nvarchar](10)
 """
 
 SAAQ_TABLE_NAME = 'D_Plaques_Provenances'
