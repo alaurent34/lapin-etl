@@ -19,9 +19,9 @@ LAPI_REV = {
 # source list
 SOURCES = {
     'Tanary-Creek':{
-        'path':'C:/Users/ALaurent/Agence de mobilité durable/Analyses de mobilité LAPI - General/00000_Données de lectures/Tanary-Creek',
+        'path':'C:/Users/alaurent/Agence de mobilité durable/SAM-05-Analyses LAPI - 0001- Données brutes - 0001- Données brutes/Tanary-Creek',
     },
     'Genetec':{
-        'path':'C:/Users/ALaurent/Agence de mobilité durable/Analyses de mobilité LAPI - General/00000_Données de lectures/Genetec',
+        'path':'C:/Users/alaurent/Agence de mobilité durable/SAM-05-Analyses LAPI - 0001- Données brutes - 0001- Données brutes/Genetec',
     }
 }
