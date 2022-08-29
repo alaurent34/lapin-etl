@@ -32,12 +32,17 @@ def extractPlaqueCollecte(con, collecteConf):
 
     return data
 
-def prepareTable(con, tableName, tableDefintion, truncate=False, techno='Genetec'):
+def checkExistsOrCreate(con, tableName, tableDefinition):
+    # Create table if not exist and troncate
+    if not utils.checkTableExists(con, tableName):
+        utils.create_table(con, tableName, tableDefinition)
+
+def prepareTable(con, tableName, tableDefinition, truncate=False, techno='Genetec'):
 
     date = pd.to_datetime('01-01-2001')
     # Create table if not exist and troncate
     if not utils.checkTableExists(con, tableName):
-        utils.create_table(con, tableName, tableDefintion)
+        utils.create_table(con, tableName, tableDefinition)
     else:
         date = utils.get_last_data_inserted(con, tableName, techno, 'InstantDeLecture')
     if truncate:
@@ -48,7 +53,12 @@ def prepareTable(con, tableName, tableDefintion, truncate=False, techno='Genetec
 def transformGenetec(dataGenetec, con, last_date, numTech=0, nameTech='Genetec'):
     dataGenetec = dataGenetec.copy()
 
+    # ensure localtimestamp is for Montreal
+    dataGenetec['TimestampUtc'] = pd.to_datetime(dataGenetec['TimestampUtc'])
+    dataGenetec['TimestampLocal'] = dataGenetec['TimestampUtc'].dt.tz_localize('utc').dt.tz_convert('America/Montreal')
+
     # delete row already in datawarehouse
+    last_date = pd.Timestamp(last_date, tz='America/Montreal')
     dataGenetec.TimestampLocal = pd.to_datetime(dataGenetec.TimestampLocal)
     dataGenetec = dataGenetec[dataGenetec.TimestampLocal > last_date]
 
@@ -57,9 +67,9 @@ def transformGenetec(dataGenetec, con, last_date, numTech=0, nameTech='Genetec')
 
     # parse genetec data
     dataGenetec.PatrollerId = dataGenetec.PatrollerId.fillna(0)
-    dataGenetec['NoJourDeLecture'] = (dataGenetec.TimestampLocal.dt.date.diff().dt.days != 0).cumsum()
     dataGenetec.Infraction = dataGenetec.Infraction.map({'N':0, 'O':1}).fillna(0).astype(int)
     dataGenetec[['Latitude', 'Longitude']] = dataGenetec[['Latitude', 'Longitude']].round(10)
+    dataGenetec['NoJourDeLecture'] = (dataGenetec.TimestampLocal.dt.date.diff().dt.days != 0).cumsum()
 
     # create DB dataframe
     columns = pd.read_sql(con=con, sql=f'SELECT TOP(0) * FROM {querry.LECTURE_TABLE_NAME}')
@@ -197,14 +207,19 @@ if __name__=='__main__':
             try:
                 transaction = con.begin()
                 # create table
-                prepareTable(con, querry.SAAQ_TABLE_NAME, querry.SAAQ_TABLE_SQL, truncate=False)
+                checkExistsOrCreate(con, querry.SAAQ_TABLE_NAME, querry.SAAQ_TABLE_SQL)
+                print('Table Created or done nothing')
 
                 filteredData = extractPlaqueCollecte(engine.connect(), runtime_conf.SAAQ_ETUDE)
+                print("Recovered data")
                 filteredData = transformSaaqRequest(filteredData)
+                print('Transformed')
                 loadedData = loadSaaq(con, filteredData, runtime_conf.SAAQ_ETUDE['id'])
+                print("Loaded")
 
                 # export SAAQ request file to Excel
                 exportSaaqFile(engine.connect(), runtime_conf.SAAQ_ETUDE, loadedData.NoDePlaque.to_list())
+                print('End')
                 transaction.commit()
             except:
                 transaction.rollback()
