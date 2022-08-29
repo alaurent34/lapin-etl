@@ -50,6 +50,21 @@ SELECT [SK_F_Lect] as id_point
 DEFAULT_WHERE = "DateDePassage BETWEEN '{}' AND '{}'\n"
 ORDER_BY_SQL = "  ORDER BY InstantDeLecture, SK_D_Vehicule ASC"
 
+CASTELNAU_CONF = {
+    'id': 22512,
+    'datesCollecte': [
+        {
+        'from': '2022-07-16',
+        'to': '2021-07-28'
+        },
+        {
+        'from': '2021-08-08',
+        'to': '2021-08-12'
+        }
+    ],
+    'noDemande' : '1',
+    'projectPath': 'C:/Users/alaurent/Agence de mobilité durable/SAM-05-Analyses LAPI - 22502_Castelneau-Ogilvy/02_Intrants/Demande SAAQ'
+}
 ONTARIO_1_CONF = {
     'id': 21506,
     'datesCollecte': [
