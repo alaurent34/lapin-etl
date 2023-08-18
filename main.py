@@ -14,9 +14,12 @@ def extract(path):
 
     data= pd.DataFrame()
     for file in os.listdir(path):
-        df_tmp = pd.read_csv(os.path.join(path, file))
-        data= pd.concat([data, df_tmp])
-    
+        try:
+            df_tmp = pd.read_csv(os.path.join(path, file))
+            data= pd.concat([data, df_tmp])
+        except pd.errors.EmptyDataError:
+            pass
+
     return data
 
 def extractPlaqueCollecte(con, collecteConf):
@@ -88,7 +91,7 @@ def transformGenetec(dataGenetec, con, last_date, numTech=0, nameTech='Genetec')
         utils.createWktElement,
         gpd.points_from_xy(dataGenetec['Longitude'], dataGenetec['Latitude'])
     ))
-    data['NoDePlaque'] =  dataGenetec['LicensePlate'].str[:15]
+    data['NoDePlaque'] =  dataGenetec['LicensePlate'].str[:15].fillna('NULL')
     data['Techno'] = nameTech
     data['IndInfraction'] = dataGenetec['Infraction']
     if 'LicensePlateState' in dataGenetec.columns:
@@ -180,6 +183,7 @@ if __name__=='__main__':
 
                 # ETL for Genetec Data
                 print('Genetec ETL')
+                print('Last recovered data :', last_data_date)
                 ## Extract
                 dataGenetec = extract(**connections.SOURCES['Genetec'])
                 dataLoad = transformGenetec(dataGenetec, con, last_data_date)
