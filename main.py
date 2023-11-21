@@ -8,13 +8,22 @@ import connections
 import querry
 import runtime_conf
 import utils
-from sqlalchemy.orm import Session
 
-def extract(path):
 
-    data= pd.DataFrame()
+def extract(path, last_date, date_col='TimestampLocal'):
+    """ Assume that you have only one day per file
+    """
+    data = pd.DataFrame()
     for file in os.listdir(path):
         try:
+            date = pd.read_csv(os.path.join(path, file), nrows=1)
+            if date.empty:
+                continue
+            date = date[date_col].iloc[0]
+            date = pd.to_datetime(date).tz_localize('America/Montreal')
+            if date < last_date:
+                continue
+
             df_tmp = pd.read_csv(os.path.join(path, file))
             data= pd.concat([data, df_tmp])
         except pd.errors.EmptyDataError:
@@ -42,27 +51,30 @@ def checkExistsOrCreate(con, tableName, tableDefinition):
 
 def prepareTable(con, tableName, tableDefinition, truncate=False, techno='Genetec'):
 
-    date = pd.to_datetime('01-01-2001')
+    date = pd.Timestamp('2021-01-01', tz='America/Montreal')
     # Create table if not exist and troncate
     if not utils.checkTableExists(con, tableName):
         utils.create_table(con, tableName, tableDefinition)
     else:
-        date = utils.get_last_data_inserted(con, tableName, techno, 'InstantDeLecture')
+        date = utils.get_last_data_inserted(con, tableName, techno, 'horodatage_lecture')
+        date = date.tz_localize('America/Montreal')
     if truncate:
-        date = pd.to_datetime('01-01-2001')
+        date = pd.Timestamp('2021-01-01', tz='America/Montreal')
 
     return date
 
 def transformGenetec(dataGenetec, con, last_date, numTech=0, nameTech='Genetec'):
     dataGenetec = dataGenetec.copy()
 
+    if dataGenetec.empty:
+        print('No data to load.')
+        sys.exit(1)
+
     # ensure localtimestamp is for Montreal
     dataGenetec['TimestampUtc'] = pd.to_datetime(dataGenetec['TimestampUtc'])
     dataGenetec['TimestampLocal'] = dataGenetec['TimestampUtc'].dt.tz_localize('utc').dt.tz_convert('America/Montreal')
 
     # delete row already in datawarehouse
-    last_date = pd.Timestamp(last_date, tz='America/Montreal')
-    dataGenetec.TimestampLocal = pd.to_datetime(dataGenetec.TimestampLocal)
     dataGenetec = dataGenetec[dataGenetec.TimestampLocal > last_date]
 
     if dataGenetec.empty:
@@ -75,30 +87,33 @@ def transformGenetec(dataGenetec, con, last_date, numTech=0, nameTech='Genetec')
     dataGenetec['NoJourDeLecture'] = (dataGenetec.TimestampLocal.dt.date.diff().dt.days != 0).cumsum()
 
     # create DB dataframe
-    columns = pd.read_sql(con=con, sql=f'SELECT TOP(0) * FROM {querry.LECTURE_TABLE_NAME}')
+    columns = pd.read_sql(con=con, sql=f'SELECT * FROM analyses.{querry.LECTURE_TABLE_NAME} LIMIT 1').columns
     data = pd.DataFrame(columns=columns)
 
-    # fill it
-    data['SK_D_Vehicule'] =  dataGenetec['PatrollerId']
-    data['NoDeTechno'] =  numTech
-    data['NoDeJourDeLecture'] =  dataGenetec['NoJourDeLecture']
-    data['DateDePassage'] =  dataGenetec['TimestampLocal'].dt.date
-    data['InstantDeLecture'] =  dataGenetec['TimestampLocal']
-    data['HeureDeLecture'] =  dataGenetec['TimestampLocal'].dt.hour
-    data['Latitude'] =  dataGenetec['Latitude']
-    data['Longitude'] =  dataGenetec['Longitude']
-    data['PointGeo'] =  list(map(
-        utils.createWktElement,
-        gpd.points_from_xy(dataGenetec['Longitude'], dataGenetec['Latitude'])
-    ))
-    data['NoDePlaque'] =  dataGenetec['LicensePlate'].str[:15].fillna('NULL')
-    data['Techno'] = nameTech
-    data['IndInfraction'] = dataGenetec['Infraction']
-    if 'LicensePlateState' in dataGenetec.columns:
-        data['EtatPlaqueLue'] = dataGenetec['LicensePlateState']
-    else:
-        data['EtatPlaqueLue'] = np.nan
+    #if dataGenetec['LicensePlate'].isna().any():
+        #print(dataGenetec[dataGenetec['LicensePlate'].isna()])
 
+    # fill it
+    data['sk_d_vehicule'] =  dataGenetec['PatrollerId']
+    data['no_techno'] =  numTech
+    data['no_jour_lecture'] =  dataGenetec['NoJourDeLecture']
+    data['date_lecture'] =  dataGenetec['TimestampLocal'].dt.date
+    data['horodatage_lecture'] =  dataGenetec['TimestampLocal']
+    data['heure_lecture'] =  dataGenetec['TimestampLocal'].dt.hour
+    data['latitude'] =  dataGenetec['Latitude']
+    data['longitude'] =  dataGenetec['Longitude']
+    data['geom_point'] = gpd.points_from_xy(dataGenetec['Longitude'], dataGenetec['Latitude'])
+    data['plaque'] =  dataGenetec['LicensePlate'].str[:15].fillna('NULL')
+    data['techno'] = nameTech
+    data['ind_infraction'] = dataGenetec['Infraction']
+    if 'LicensePlateState' in dataGenetec.columns:
+        data['province_plaque'] = dataGenetec['LicensePlateState']
+    else:
+        data['province_plaque'] = np.nan
+
+    data = data.drop(columns='sk_f_lect', errors='ignore')
+
+    data = gpd.GeoDataFrame(data, geometry='geom_point', crs='epsg:4326')
     return data
 
 def transformTanary(dataTanary, con, numTech=1, nameTech='Tanary-Creek'):
@@ -111,27 +126,27 @@ def transformTanary(dataTanary, con, numTech=1, nameTech='Tanary-Creek'):
     dataTanary['VehId'] = 1 # Tanary does not have any veh id for now
 
     # create DB dataframe
-    columns = pd.read_sql(con=con, sql=f'SELECT * FROM {querry.LECTURE_TABLE_NAME}')
+    columns = pd.read_sql(con=con, sql=f'SELECT * FROM {querry.LECTURE_TABLE_NAME}').columns
     data = pd.DataFrame(columns=columns)
 
     # fill it
-    data['SK_D_Vehicule'] =  dataTanary['VehId']
-    data['NoDeTechno'] =  numTech
-    data['NoDeJourDeLecture'] =  dataTanary['NoJourDeLecture']
-    data['DateDePassage'] =  dataTanary['TIME_SEEN'].dt.date
-    data['InstantDeLecture'] =  dataTanary['TIME_SEEN']
-    data['HeureDeLecture'] =  dataTanary['TIME_SEEN'].dt.hour
-    data['Latitude'] =  dataTanary['LATITUDE']
-    data['Longitude'] =  dataTanary['LONGITUDE']
-    data['PointGeo'] =  list(map(
-        utils.createWktElement,
-        gpd.points_from_xy(dataTanary['LONGITUDE'], dataTanary['LATITUDE'])
-    ))
-    data['NoDePlaque'] =  dataTanary['PLATE']
-    data['Techno'] = nameTech
-    data['NoPlaceDerivee'] = 'P999'
-    data['EtatPlaqueLue'] = np.nan
+    data['sk_d_vehicule'] =  dataTanary['VehId']
+    data['no_techno'] =  numTech
+    data['no_jour_lecture'] =  dataTanary['NoJourDeLecture']
+    data['date_lecture'] =  dataTanary['TIME_SEEN'].dt.date
+    data['horodatage_lecture'] =  dataTanary['TIME_SEEN']
+    data['heure_lecture'] =  dataTanary['TIME_SEEN'].dt.hour
+    data['latitude'] =  dataTanary['LATITUDE']
+    data['longitude'] =  dataTanary['LONGITUDE']
+    data['geom_point'] = gpd.points_from_xy(dataTanary['LONGITUDE'], dataTanary['LATITUDE'])
+    data['plaque'] =  dataTanary['PLATE']
+    data['techno'] = nameTech
+    data['no_place_derivee'] = np.nan
+    data['province_plaque'] = np.nan
 
+    data = data.drop(columns='sk_f_lect', errors='ignore')
+
+    data = gpd.GeoDataFrame(data, geometry='geom_point', crs='epsg:4326')
     return data
 
 def transformSaaqRequest(data):
@@ -150,7 +165,7 @@ def loadSaaq(con, data, idProjet):
     dataInStore = pd.read_sql(con=con, sql=f'SELECT * FROM {querry.SAAQ_TABLE_NAME} WHERE IdDeProjet={idProjet}')
     data = data[~data['NoDePlaque'].isin(dataInStore['NoDePlaque'])]
     # Store data
-    data.to_sql(querry.SAAQ_TABLE_NAME, con=con, index=False, if_exists='append', schema='dbo')
+    data.to_sql(querry.SAAQ_TABLE_NAME, con=con, index=False, if_exists='append', schema='analyses')
 
     return data
 
@@ -185,14 +200,17 @@ if __name__=='__main__':
                 print('Genetec ETL')
                 print('Last recovered data :', last_data_date)
                 ## Extract
-                dataGenetec = extract(**connections.SOURCES['Genetec'])
+                dataGenetec = extract(**connections.SOURCES['Genetec'], last_date=last_data_date)
+                print('Data extracted.')
                 dataLoad = transformGenetec(dataGenetec, con, last_data_date)
+                print('Data Transformed.')
                 if dataLoad.empty:
                     print('Nothing to do.')
                     sys.exit(0)
                 ## Load
-                dataLoad.to_sql(querry.LECTURE_TABLE_NAME, con=con, index=False, if_exists='append', schema='dbo', dtype={'PointGeo': utils.Geometry})
+                dataLoad.to_postgis(querry.LECTURE_TABLE_NAME, con=con, index=False, if_exists='append', schema='analyses')
                 transaction.commit()
+                print('Data Loaded.')
 
                 # EL for Tanary-Creek
                 # Ne marche pas, prend trop de temps
