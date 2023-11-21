@@ -1,0 +1,38 @@
+name: env-lapin
+channels:
+    - conda-forge
+dependencies:
+  - python
+  - adjusttext
+  - contextily
+  - folium
+  - deprecated
+  - geopandas
+  - geopy
+  - geoalchemy2
+  - importlib_resources
+  - jellyfish=0.9.*
+  - matplotlib
+  - mapclassify
+  - momepy
+  - networkx
+  - numba
+  - numpy
+  - openpyxl
+  - osmnx
+  - pandas
+  - pathvalidate
+  - pillow
+  - psycopg2
+  - pyodbc
+  - requests
+  - scikit-learn
+  - scipy
+  - seaborn
+  - six
+  - sqlalchemy=1.4.*
+  - statsmodels
+  - xlrd
+  - pip
+  - pip:
+    - osrm-py
