@@ -4,11 +4,11 @@
 
 # sql-server (target db, datawarehouse)
 LAPI_REV = {
-    'Trusted_Connection': 'yes',
-    'driver': 'SQL Server',
-    'server': 'prisqlbiprod01',
-    'database': 'LAPI_REV',
-    'autocommit': False,
+    'driver': 'postgresql',
+    'server': '',
+    'database': '',
+    'user':'',
+    'pwd':'',
     'fast_executemany': True,
 }
 
