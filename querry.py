@@ -1,6 +1,26 @@
-LECTURE_TABLE_NAME = "F_Données_Lues"
+LECTURE_TABLE_NAME = "donnees_lapi"
+MSSQL_LECTURE_TABLE_NAME = "F_Données_Lues"
 
 LECTURE_TABLE_SQL = """
+		sk_f_lect BIGINT GENERATED ALWAYS AS IDENTITY,
+		sk_d_vehicule TEXT NOT NULL,
+		no_techno INT NOT NULL,
+		horodatage_lecture TIMESTAMPTZ NOT NULL,
+		no_jour_lecture INT NOT NULL,
+		date_lecture DATE NOT NULL,
+		heure_lecture INT NOT NULL,
+		latitude DECIMAL(12, 10) NOT NULL,
+		longitude DECIMAL(12, 10) NOT NULL,
+		geom_point GEOMETRY NOT NULL,
+		plaque TEXT NOT NULL,
+		techno TEXT NOT NULL,
+		no_place_derivee TEXT,
+		no_troncon_derive TEXT,
+		ind_infraction INT DEFAULT 0,
+        cote_lecture INT,
+        province_plaque TEXT
+"""
+MSSQL_LECTURE_TABLE_SQL = """
 		[SK_F_Lect] [bigint] IDENTITY(1,1) NOT NULL,
 		[SK_D_Vehicule] [nvarchar](50) NOT NULL,
 		[NoDeTechno] [tinyint] NOT NULL,
@@ -21,9 +41,25 @@ LECTURE_TABLE_SQL = """
         [EtatPlaqueLue][nvarchar](10)
 """
 
-SAAQ_TABLE_NAME = 'D_Plaques_Provenances'
+SAAQ_TABLE_NAME = 'd_plaques_provenances'
 
 SAAQ_TABLE_SQL = f"""
+	id_plaque int identity(1,1) not null,
+    id_projet int not null,
+	plaque nvarchar(15) not null,
+	rta char(3) null,
+	udl char(3) null,
+	plaque_est_valide bool null,
+	municipalite nvarchar(50) null
+
+    constraint pk_{SAAQ_TABLE_NAME} primary key clustered (
+        id_plaque, id_projet, plaque
+    )
+"""
+
+MSSQL_SAAQ_TABLE_NAME = 'D_Plaques_Provenances'
+
+MSSQL_SAAQ_TABLE_SQL = f"""
 	[IdDePlaque] [int] IDENTITY(1,1) NOT NULL,
     [IdDeProjet] [int] NOT NULL,
 	[NoDePlaque] [nvarchar](15) NOT NULL,
@@ -37,6 +73,20 @@ SAAQ_TABLE_SQL = f"""
 """
 
 DEFAULT_LAPI_QUERRY = f"""
+select sk_f_lect as id_point
+      ,sk_d_vehicule as uuid
+      ,horodatage_lecture as time
+      ,latitude as lat
+      ,longitude as lng
+      ,plaque as plaque
+      ,ind_infraction as is_infraction
+  from {LECTURE_TABLE_NAME}
+  where 1=1
+"""
+DEFAULT_WHERE = "datedepassage between '{}' and '{}'\n"
+ORDER_BY_SQL = "  order by instantdelecture, sk_d_vehicule asc"
+
+MSSQL_DEFAULT_LAPI_QUERRY = f"""
 SELECT [SK_F_Lect] as id_point
       ,[SK_D_Vehicule] as uuid
       ,[InstantDeLecture] as time
@@ -47,8 +97,8 @@ SELECT [SK_F_Lect] as id_point
   FROM [dbo].[{LECTURE_TABLE_NAME}]
   WHERE 1=1
 """
-DEFAULT_WHERE = "DateDePassage BETWEEN '{}' AND '{}'\n"
-ORDER_BY_SQL = "  ORDER BY InstantDeLecture, SK_D_Vehicule ASC"
+MSSQL_DEFAULT_WHERE = "DateDePassage BETWEEN '{}' AND '{}'\n"
+MSSQL_ORDER_BY_SQL = "  ORDER BY InstantDeLecture, SK_D_Vehicule ASC"
 
 CASTELNAU_CONF = {
     'id': 22512,
