@@ -1,4 +1,5 @@
 import os
+import glob
 import sys
 import numpy as np
 import pandas as pd
@@ -14,7 +15,8 @@ def extract(path, last_date, date_col='TimestampLocal'):
     """ Assume that you have only one day per file
     """
     data = pd.DataFrame()
-    for file in os.listdir(path):
+    files = glob.glob(f"{path}/*.csv")
+    for file in files:
         try:
             date = pd.read_csv(os.path.join(path, file), nrows=1)
             if date.empty:
